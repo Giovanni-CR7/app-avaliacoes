@@ -23,10 +23,11 @@ public class Avaliacao {
     private String emailAvaliado;
 
     @Column(length = 1000)
-    private String comentarios;
+    private String comentariosAvaliacao;
 
     @Column(nullable = false)
-    private Integer nota;
+    private Integer nota; // 0 a 10
 
+    @Column(nullable = false)
     private LocalDateTime dataAvaliacao;
 }

@@ -20,13 +20,12 @@ public class AvaliacaoService {
         Avaliacao avaliacao = Avaliacao.builder()
                 .emailAvaliador(dto.getEmailAvaliador())
                 .emailAvaliado(dto.getEmailAvaliado())
-                .comentarios(dto.getComentarios())
+                .comentariosAvaliacao(dto.getComentariosAvaliacao())
                 .nota(dto.getNota())
                 .dataAvaliacao(LocalDateTime.now())
                 .build();
 
-        Avaliacao salvo = repository.save(avaliacao);
-        return toDTO(salvo);
+        return toDTO(repository.save(avaliacao));
     }
 
     public List<AvaliacaoResponseDTO> listar() {
@@ -40,7 +39,7 @@ public class AvaliacaoService {
                 .id(avaliacao.getId())
                 .emailAvaliador(avaliacao.getEmailAvaliador())
                 .emailAvaliado(avaliacao.getEmailAvaliado())
-                .comentarios(avaliacao.getComentarios())
+                .comentariosAvaliacao(avaliacao.getComentariosAvaliacao())
                 .nota(avaliacao.getNota())
                 .dataAvaliacao(avaliacao.getDataAvaliacao())
                 .build();

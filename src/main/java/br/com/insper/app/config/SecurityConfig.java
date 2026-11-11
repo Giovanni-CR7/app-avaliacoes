@@ -1,64 +1,54 @@
-package br.com.insper.app.config;
+name: Deploy Back-End to AWS
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+on:
+push:
+branches: [ "main" ]
 
-import java.util.List;
+jobs:
+build-and-deploy:
+runs-on: ubuntu-latest
 
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
+steps:
+        - uses: actions/checkout@v4
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                        // Cadastrar avaliação: somente ADMIN (permissão write:avaliacoes)
-                        .requestMatchers(HttpMethod.POST, "/avaliacoes/**").hasAuthority("SCOPE_write:avaliacoes")
-                        // Listar avaliações: ADMIN e USER (permissão read:avaliacoes)
-                        .requestMatchers(HttpMethod.GET, "/avaliacoes/**").hasAuthority("SCOPE_read:avaliacoes")
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
-                );
-        return http.build();
-    }
+      - name: Set up JDK 21
+uses: actions/setup-java@v4
+with:
+java-version: '21'
+distribution: 'temurin'
+cache: maven
 
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        // O Auth0 injeta as permissões RBAC na claim "permissions"
-        authoritiesConverter.setAuthoritiesClaimName("permissions");
-        authoritiesConverter.setAuthorityPrefix("SCOPE_");
+      - name: Make mvnw executable
+run: chmod +x mvnw
 
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
-        return converter;
-    }
+      - name: Build with Maven (No Tests)
+run: ./mvnw -B clean package -DskipTests --file pom.xml
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
+      - name: Login to Docker Hub
+uses: docker/login-action@v3
+with:
+username: "givil"
+password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-}
+      - name: Set up Docker Buildx
+uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+uses: docker/build-push-action@v5
+with:
+context: .
+file: ./dockerfile
+push: true
+tags: givil/app-avaliacoes:${{ github.sha }}
+
+      - name: Deploy via SSH to AWS EC2
+uses: appleboy/ssh-action@master
+with:
+host: ${{ secrets.HOST_TEST }}
+username: "ubuntu"
+key: ${{ secrets.KEY_TEST }}
+port: 22
+script: |
+docker stop app-avaliacoes || true
+docker rm --force app-avaliacoes || true
+docker run -d --restart unless-stopped --network host --name app-avaliacoes givil/app-avaliacoes:${{ github.sha }}

@@ -3,6 +3,7 @@ package br.com.insper.app.controller;
 import br.com.insper.app.dto.AvaliacaoRequestDTO;
 import br.com.insper.app.dto.AvaliacaoResponseDTO;
 import br.com.insper.app.service.AvaliacaoService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +19,7 @@ public class AvaliacaoController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public AvaliacaoResponseDTO cadastrar(@RequestBody AvaliacaoRequestDTO dto) {
+    public AvaliacaoResponseDTO cadastrar(@Valid @RequestBody AvaliacaoRequestDTO dto) {
         return service.salvar(dto);
     }
 
