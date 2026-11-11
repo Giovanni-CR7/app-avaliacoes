@@ -49,25 +49,13 @@ jobs:
           key: ${{ secrets.KEY_TEST }}
           port: 22
           script: |
-            # 1. Garante o PostgreSQL rodando na porta 5432 da máquina
-            docker start postgres-db || docker run -d --name postgres-db \
-              --network host \
-              -e POSTGRES_DB=prova_db \
-              -e POSTGRES_USER=usuario \
-              -e POSTGRES_PASSWORD=senha \
-              postgres:15-alpine
-            
-            sleep 5
-            
-            # 2. Sobe o Spring Boot direto na porta 80 da máquina (que é liberada na AWS)
+            docker stop app-cursos || true
+            docker stop app-prova || true
             docker stop app-avaliacoes || true
             docker rm --force app-avaliacoes || true
-            docker pull ${{ secrets.DOCKER_USERNAME }}/app-avaliacoes:latest
-            docker run -d --network host \
-              -e SERVER_PORT=80 \
-              --name app-avaliacoes \
-              ${{ secrets.DOCKER_USERNAME }}/app-avaliacoes:latest
-            
+            docker exec postgres-aula psql -U usuario -tc "SELECT 1 FROM pg_database WHERE datname = 'prova_db'" | grep -q 1 || docker exec postgres-aula psql -U usuario -c "CREATE DATABASE prova_db;" || true
+            docker pull givil/app-avaliacoes:${{ github.sha }}
+            docker run -d --network host --name app-avaliacoes givil/app-avaliacoes:${{ github.sha }}
             sleep 10
             docker ps -a
             docker logs app-avaliacoes
