@@ -6,11 +6,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "avaliacoes")
-@Getter
-@Setter
+@Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Avaliacao {
 
     @Id
