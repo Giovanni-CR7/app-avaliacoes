@@ -2,124 +2,53 @@ name: Deploy Back-End to AWS
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-app-avaliacoes
-  cancel-in-progress: false
+    branches: [ "main" ]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: "21"
-          distribution: temurin
+          java-version: '21'
+          distribution: 'temurin'
           cache: maven
 
       - name: Make mvnw executable
         run: chmod +x mvnw
 
-      - name: Build with Maven
+      - name: Build with Maven (No Tests)
         run: ./mvnw -B clean package -DskipTests --file pom.xml
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: givil
+          username: "givil"
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push image
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./dockerfile
+          file: ./Dockerfile
           push: true
           tags: givil/app-avaliacoes:${{ github.sha }}
 
-      - name: Deploy to AWS EC2
-        uses: appleboy/ssh-action@v1.2.0
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      - name: Deploy via SSH to AWS EC2
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST_TEST }}
-          username: ubuntu
+          username: "ubuntu"
           key: ${{ secrets.KEY_TEST }}
           port: 22
-          command_timeout: 10m
-          envs: IMAGE_TAG,DB_HOST,DB_NAME,DB_USERNAME,DB_PASSWORD
           script: |
-            set -eu
-
-            : "${IMAGE_TAG:?Tag da imagem ausente}"
-            : "${DB_HOST:?Configure o secret DB_HOST}"
-            : "${DB_NAME:?Configure o secret DB_NAME}"
-            : "${DB_USERNAME:?Configure o secret DB_USERNAME}"
-            : "${DB_PASSWORD:?Configure o secret DB_PASSWORD}"
-
-            command -v docker >/dev/null
-            command -v curl >/dev/null
-
-            IMAGE="givil/app-avaliacoes:${IMAGE_TAG}"
-
-            # Baixa a nova imagem antes de interromper o container atual.
-            docker pull "$IMAGE"
-
-            if docker container inspect app-avaliacoes >/dev/null 2>&1; then
-              docker stop app-avaliacoes
-              docker rm app-avaliacoes
-            fi
-
-            # Porta externa da EC2: 80.
-            # Porta interna do Spring Boot: 8080.
-            docker run -d \
-              --name app-avaliacoes \
-              --restart unless-stopped \
-              -p 80:8080 \
-              -e SERVER_PORT=8080 \
-              -e DB_HOST="$DB_HOST" \
-              -e DB_NAME="$DB_NAME" \
-              -e DB_USERNAME="$DB_USERNAME" \
-              -e DB_PASSWORD="$DB_PASSWORD" \
-              "$IMAGE"
-
-            echo "Aguardando a inicialização da API..."
-
-            for attempt in $(seq 1 60); do
-              STATUS="$(
-                curl \
-                  --silent \
-                  --max-time 2 \
-                  --output /dev/null \
-                  --write-out '%{http_code}' \
-                  http://127.0.0.1:80/avaliacoes || true
-              )"
-
-              # A rota exige autenticação: sem token, 401 é esperado.
-              if [ "$STATUS" = "401" ]; then
-                echo "API respondeu na porta 80."
-                exit 0
-              fi
-
-              sleep 2
-            done
-
-            echo "A API não respondeu como esperado. Últimos logs:"
-            docker logs --tail 100 app-avaliacoes
-            exit 1
+            docker stop app-avaliacoes || true
+            docker rm --force app-avaliacoes || true
+            docker run -d -p 80:8080 --name app-avaliacoes givil/app-avaliacoes:${{ github.sha }}
