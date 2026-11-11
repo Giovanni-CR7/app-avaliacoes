@@ -49,6 +49,22 @@ jobs:
           key: ${{ secrets.KEY_TEST }}
           port: 22
           script: |
+            # 1. Garante que o PostgreSQL está rodando na EC2 com as credenciais do application.properties
+            docker start postgres-db || docker run -d --name postgres-db \
+              --network host \
+              -e POSTGRES_DB=prova_db \
+              -e POSTGRES_USER=usuario \
+              -e POSTGRES_PASSWORD=senha \
+              postgres:15-alpine
+            
+            sleep 5
+            
+            # 2. Reinicia a aplicação conectando na rede da máquina (host)
             docker stop app-avaliacoes || true
             docker rm --force app-avaliacoes || true
-            docker run -d -p 80:8080 --name app-avaliacoes givil/app-avaliacoes:${{ github.sha }}
+            docker pull givil/app-avaliacoes:${{ github.sha }}
+            docker run -d --network host --name app-avaliacoes givil/app-avaliacoes:${{ github.sha }}
+            
+            sleep 10
+            docker ps -a
+            docker logs app-avaliacoes
